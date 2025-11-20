@@ -28,6 +28,7 @@ require 'rise_up/api_resource/session_group'
 require 'rise_up/api_resource/learning_path_registration'
 require 'rise_up/api_resource/custom_header'
 require 'rise_up/api_resource/partner'
+require 'rise_up/api_resource/session_subscription'
 require 'rise_up/client/partners'
 require 'rise_up/client/users'
 require 'rise_up/client/sessions'
@@ -56,6 +57,7 @@ require 'rise_up/client/objective_level_users'
 require 'rise_up/client/objective_levels'
 require 'rise_up/client/training_session_registrations'
 require 'rise_up/client/training_sessions'
+require 'rise_up/client/session_subscriptions'
 
 module RiseUp
   class ExpiredTokenError < StandardError; end
@@ -89,6 +91,7 @@ module RiseUp
     include RiseUp::Client::ObjectiveLevels
     include RiseUp::Client::TrainingSessionRegistrations
     include RiseUp::Client::TrainingSessions
+    include RiseUp::Client::SessionSubscriptions
     attr_accessor :public_key, :private_key, :authorization_base_64, :access_token_details, :access_token, :token_storage, :mode
 
     BASE_URIS = {
@@ -123,7 +126,7 @@ module RiseUp
     def retrieve_with_pagination(resource_name, options = {}, resource_klass = nil)
       url = "#{@base_uri}/#{resource_name}"
       items = []
-    
+
       loop do
         response = request(resource_klass, wrap_response: true) do
           self.class.get(url, {
@@ -134,18 +137,18 @@ module RiseUp
             }
           })
         end
-        
+
         items.concat(response.body) if response.body
-    
+
         # Process `Link` header for next page
         link_header = response.headers['Link']
         next_link = extract_next_link(link_header)
-    
+
         break unless next_link
-    
+
         url = next_link # Update URL for the next page
       end
-    
+
       items
     end
     # "1ef7a484f8e4e76ed9c0c7bc6af1b08ef5cb045f"
@@ -194,13 +197,13 @@ module RiseUp
       next_link = links.find { |link| link.include?('rel="next"') }
       next_link&.match(/<(.+?)>/)&.captures&.first
     end
-    
+
     def handle_errors(response)
       return unless response.is_a?(Hash)
 
       return unless response['error']
-  
-      if response['error']  
+
+      if response['error']
         if retryable_error?(response['error'])
           refresh_access_token
           raise 'Token refreshed. Retrying request.'
