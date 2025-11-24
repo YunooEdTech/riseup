@@ -29,6 +29,7 @@ require 'rise_up/api_resource/learning_path_registration'
 require 'rise_up/api_resource/custom_header'
 require 'rise_up/api_resource/partner'
 require 'rise_up/api_resource/session_subscription'
+require 'rise_up/utils/token_bucket'
 require 'rise_up/client/partners'
 require 'rise_up/client/users'
 require 'rise_up/client/sessions'
@@ -63,6 +64,7 @@ module RiseUp
   class ExpiredTokenError < StandardError; end
   class ApiResponseError < StandardError; end
   class RateLimitRetryError < StandardError; end
+
   class Client
     include HTTParty
     include RiseUp::Client::Partners
@@ -94,6 +96,9 @@ module RiseUp
     include RiseUp::Client::TrainingSessions
     include RiseUp::Client::SessionSubscriptions
     attr_accessor :public_key, :private_key, :authorization_base_64, :access_token_details, :access_token, :token_storage, :mode
+
+    RATE_LIMIT_CAPACITY = 500
+    RATE_LIMIT_REFILL_PER_SECOND = RATE_LIMIT_CAPACITY.to_f / 60.0
 
     BASE_URIS = {
       production: {
@@ -153,6 +158,13 @@ module RiseUp
       items
     end
 
+    def self.rate_limiter
+      @rate_limiter ||= TokenBucket.new(
+        capacity: RATE_LIMIT_CAPACITY,
+        refill_rate_per_second: RATE_LIMIT_REFILL_PER_SECOND
+      )
+    end
+
     def request(resource = nil, wrap_response: false)
       max_token_retries = 2
       max_rate_limit_retries = 3
@@ -161,6 +173,8 @@ module RiseUp
       rate_limit_retries = 0
 
       begin
+        self.class.rate_limiter.consume
+
         raw_response = yield
 
         if handle_rate_limit(raw_response, rate_limit_retries, max_rate_limit_retries)
