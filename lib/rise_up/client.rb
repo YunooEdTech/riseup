@@ -62,6 +62,7 @@ require 'rise_up/client/session_subscriptions'
 module RiseUp
   class ExpiredTokenError < StandardError; end
   class ApiResponseError < StandardError; end
+  class RateLimitRetryError < StandardError; end
   class Client
     include HTTParty
     include RiseUp::Client::Partners
@@ -151,24 +152,35 @@ module RiseUp
 
       items
     end
-    # "1ef7a484f8e4e76ed9c0c7bc6af1b08ef5cb045f"
+
     def request(resource = nil, wrap_response: false)
-      max_retries = 2
-      retries = 0
+      max_token_retries = 2
+      max_rate_limit_retries = 3
+
+      token_retries = 0
+      rate_limit_retries = 0
 
       begin
         raw_response = yield
+
+        if handle_rate_limit(raw_response, rate_limit_retries, max_rate_limit_retries)
+          rate_limit_retries += 1
+          raise RateLimitRetryError, 'Rate limit encountered. Retrying request.'
+        end
+
         parsed_body = JSON.parse(raw_response.body)
         handle_errors(parsed_body)
 
         if wrap_response
           OpenStruct.new(body: handle_response(parsed_body, resource), headers: raw_response.headers)
         else
-          handle_response(parsed_body, resource) # Return the processed response directly
+          handle_response(parsed_body, resource)
         end
+      rescue RateLimitRetryError
+        retry
       rescue RuntimeError => e
-        if should_retry?(e, retries, max_retries)
-          retries += 1
+        if should_retry?(e, token_retries, max_token_retries)
+          token_retries += 1
           retry
         else
           raise e
@@ -247,6 +259,27 @@ module RiseUp
 
     def handle_hash_response(response, resource)
       resource.new(response) if resource
+    end
+
+    def handle_rate_limit(raw_response, rate_limit_retries, max_rate_limit_retries)
+      return false unless raw_response.code.to_i == 429
+
+      if rate_limit_retries < max_rate_limit_retries
+        sleep(rate_limit_sleep_seconds(raw_response, rate_limit_retries))
+        true
+      else
+        raise(ApiResponseError, 'Rate limit exceeded and max retries reached')
+      end
+    end
+
+    def rate_limit_sleep_seconds(raw_response, attempt_index)
+      retry_after_header = raw_response.headers['Retry-After'] || raw_response.headers['retry-after']
+      return retry_after_header.to_i if retry_after_header
+
+      base_delay_seconds = 2**attempt_index
+      jitter_seconds = rand
+
+      base_delay_seconds + jitter_seconds
     end
 
     def should_retry?(exception, retries, max_retries)
