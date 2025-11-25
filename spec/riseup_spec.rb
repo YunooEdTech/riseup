@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
-RSpec.describe Riseup do
+RSpec.describe RiseUp do
   it "has a version number" do
-    expect(Riseup::VERSION).not_to be nil
+    expect(RiseUp::VERSION).not_to be nil
   end
 
-  it "does something useful" do
-    expect(false).to eq(true)
+  it "can be instantiated with minimal options" do
+    client = RiseUp::Client.new(public_key: "pk", private_key: "sk")
+
+    expect(client).to be_a(RiseUp::Client)
   end
 end

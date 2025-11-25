@@ -97,7 +97,7 @@ module RiseUp
     include RiseUp::Client::SessionSubscriptions
     attr_accessor :public_key, :private_key, :authorization_base_64, :access_token_details, :access_token, :token_storage, :mode
 
-    RATE_LIMIT_CAPACITY = 500
+    RATE_LIMIT_CAPACITY = 400
     RATE_LIMIT_REFILL_PER_SECOND = RATE_LIMIT_CAPACITY.to_f / 60.0
 
     BASE_URIS = {
@@ -159,6 +159,7 @@ module RiseUp
     end
 
     def self.rate_limiter
+      # One rate limiter shared by all clients using RiseUp API in the same process
       @rate_limiter ||= TokenBucket.new(
         capacity: RATE_LIMIT_CAPACITY,
         refill_rate_per_second: RATE_LIMIT_REFILL_PER_SECOND
