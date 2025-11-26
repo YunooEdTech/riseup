@@ -99,6 +99,7 @@ module RiseUp
 
     RATE_LIMIT_CAPACITY = 400
     RATE_LIMIT_REFILL_PER_SECOND = RATE_LIMIT_CAPACITY.to_f / 60.0
+    BASE_RATE_LIMIT_DELAYS = [10, 20, 30].freeze
 
     BASE_URIS = {
       production: {
@@ -280,21 +281,18 @@ module RiseUp
       return false unless raw_response.code.to_i == 429
 
       if rate_limit_retries < max_rate_limit_retries
-        sleep(rate_limit_sleep_seconds(raw_response, rate_limit_retries))
+        sleep(rate_limit_sleep_seconds(rate_limit_retries))
         true
       else
         raise(ApiResponseError, 'Rate limit exceeded and max retries reached')
       end
     end
 
-    def rate_limit_sleep_seconds(raw_response, attempt_index)
-      retry_after_header = raw_response.headers['Retry-After'] || raw_response.headers['retry-after']
-      return retry_after_header.to_i if retry_after_header
+    def rate_limit_sleep_seconds(attempt_index)
+      base_delay_seconds = BASE_RATE_LIMIT_DELAYS[attempt_index] || BASE_RATE_LIMIT_DELAYS.last
+      jitter_factor = 1.0 + (rand * 0.2) # 1.0x–1.2x
 
-      base_delay_seconds = 2**attempt_index
-      jitter_seconds = rand
-
-      base_delay_seconds + jitter_seconds
+      (base_delay_seconds * jitter_factor).round(1)
     end
 
     def should_retry?(exception, retries, max_retries)
