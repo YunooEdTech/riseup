@@ -32,6 +32,6 @@ module RiseUp
 end
 # curl -X POST \
 #   --header "Content-Type: application/x-www-form-urlencoded" \
-#   --header "Authorization: Basic ZDliZTNkZDlkOGQzMGFkZTgxZjRmM2NjMTI1NDY1ZjU6YjM2MTliYWVmNWMyZjFiOWQ5ZjhkMmQ4NjBiNWYxNjc=" \
-#   -d "grant_type=client_credentials" \ 
+#   --header "Authorization: Basic insert_your_token_here" \
+#   -d "grant_type=client_credentials" \
 #   https://preprod-customer-api.riseup.ai/oauth/token

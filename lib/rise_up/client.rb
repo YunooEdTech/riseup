@@ -29,6 +29,7 @@ require 'rise_up/api_resource/learning_path_registration'
 require 'rise_up/api_resource/custom_header'
 require 'rise_up/api_resource/partner'
 require 'rise_up/api_resource/session_subscription'
+require 'rise_up/utils/token_bucket'
 require 'rise_up/client/partners'
 require 'rise_up/client/users'
 require 'rise_up/client/sessions'
@@ -62,6 +63,8 @@ require 'rise_up/client/session_subscriptions'
 module RiseUp
   class ExpiredTokenError < StandardError; end
   class ApiResponseError < StandardError; end
+  class RateLimitRetryError < StandardError; end
+
   class Client
     include HTTParty
     include RiseUp::Client::Partners
@@ -93,6 +96,10 @@ module RiseUp
     include RiseUp::Client::TrainingSessions
     include RiseUp::Client::SessionSubscriptions
     attr_accessor :public_key, :private_key, :authorization_base_64, :access_token_details, :access_token, :token_storage, :mode
+
+    RATE_LIMIT_CAPACITY = 400
+    RATE_LIMIT_REFILL_PER_SECOND = RATE_LIMIT_CAPACITY.to_f / 60.0
+    BASE_RATE_LIMIT_DELAYS = [10, 20, 30].freeze
 
     BASE_URIS = {
       production: {
@@ -151,24 +158,45 @@ module RiseUp
 
       items
     end
-    # "1ef7a484f8e4e76ed9c0c7bc6af1b08ef5cb045f"
+
+    def self.rate_limiter
+      # One rate limiter shared by all clients using RiseUp API in the same process
+      @rate_limiter ||= TokenBucket.new(
+        RATE_LIMIT_CAPACITY,
+        RATE_LIMIT_REFILL_PER_SECOND
+      )
+    end
+
     def request(resource = nil, wrap_response: false)
-      max_retries = 2
-      retries = 0
+      max_token_retries = 2
+      max_rate_limit_retries = 3
+
+      token_retries = 0
+      rate_limit_retries = 0
 
       begin
+        self.class.rate_limiter.consume
+
         raw_response = yield
+
+        if handle_rate_limit(raw_response, rate_limit_retries, max_rate_limit_retries)
+          rate_limit_retries += 1
+          raise RateLimitRetryError, 'Rate limit encountered. Retrying request.'
+        end
+
         parsed_body = JSON.parse(raw_response.body)
         handle_errors(parsed_body)
 
         if wrap_response
           OpenStruct.new(body: handle_response(parsed_body, resource), headers: raw_response.headers)
         else
-          handle_response(parsed_body, resource) # Return the processed response directly
+          handle_response(parsed_body, resource)
         end
+      rescue RateLimitRetryError
+        retry
       rescue RuntimeError => e
-        if should_retry?(e, retries, max_retries)
-          retries += 1
+        if should_retry?(e, token_retries, max_token_retries)
+          token_retries += 1
           retry
         else
           raise e
@@ -247,6 +275,24 @@ module RiseUp
 
     def handle_hash_response(response, resource)
       resource.new(response) if resource
+    end
+
+    def handle_rate_limit(raw_response, rate_limit_retries, max_rate_limit_retries)
+      return false unless raw_response.code.to_i == 429
+
+      if rate_limit_retries < max_rate_limit_retries
+        sleep(rate_limit_sleep_seconds(rate_limit_retries))
+        true
+      else
+        raise(ApiResponseError, 'Rate limit exceeded and max retries reached')
+      end
+    end
+
+    def rate_limit_sleep_seconds(attempt_index)
+      base_delay_seconds = BASE_RATE_LIMIT_DELAYS[attempt_index] || BASE_RATE_LIMIT_DELAYS.last
+      jitter_factor = 1.0 + (rand * 0.2) # 1.0x–1.2x
+
+      (base_delay_seconds * jitter_factor).round(1)
     end
 
     def should_retry?(exception, retries, max_retries)

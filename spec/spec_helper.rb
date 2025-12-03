@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "riseup"
+require "rise_up"
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
