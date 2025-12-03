@@ -162,8 +162,8 @@ module RiseUp
     def self.rate_limiter
       # One rate limiter shared by all clients using RiseUp API in the same process
       @rate_limiter ||= TokenBucket.new(
-        capacity: RATE_LIMIT_CAPACITY,
-        refill_rate_per_second: RATE_LIMIT_REFILL_PER_SECOND
+        RATE_LIMIT_CAPACITY,
+        RATE_LIMIT_REFILL_PER_SECOND
       )
     end
 
