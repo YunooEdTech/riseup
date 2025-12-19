@@ -29,6 +29,7 @@ require 'rise_up/api_resource/learning_path_registration'
 require 'rise_up/api_resource/custom_header'
 require 'rise_up/api_resource/partner'
 require 'rise_up/api_resource/session_subscription'
+require 'rise_up/api_resource/classroom_session_registration'
 require 'rise_up/utils/token_bucket'
 require 'rise_up/client/partners'
 require 'rise_up/client/users'
@@ -59,6 +60,7 @@ require 'rise_up/client/objective_levels'
 require 'rise_up/client/training_session_registrations'
 require 'rise_up/client/training_sessions'
 require 'rise_up/client/session_subscriptions'
+require 'rise_up/client/classroom_session_registrations'
 
 module RiseUp
   class ExpiredTokenError < StandardError; end
@@ -95,6 +97,8 @@ module RiseUp
     include RiseUp::Client::TrainingSessionRegistrations
     include RiseUp::Client::TrainingSessions
     include RiseUp::Client::SessionSubscriptions
+    include RiseUp::Client::ClassroomSessionRegistrations
+
     attr_accessor :public_key, :private_key, :authorization_base_64, :access_token_details, :access_token, :token_storage, :mode
 
     RATE_LIMIT_CAPACITY = 400
