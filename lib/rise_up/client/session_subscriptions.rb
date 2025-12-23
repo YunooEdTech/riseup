@@ -5,7 +5,7 @@ module RiseUp
 
       def retrieve_session_subscriptions_by_session_id(session_id)
          request(ApiResource::SessionSubscription) do
-           self.class.get("#{@base_uri}/#{BASE}/#{session_id}", {
+           self.class.get("#{@base_uri}/#{BASE}?idsession=#{session_id}", {
                                        headers: {
                                           'Authorization' => "Bearer #{access_token}",
                                          'Content-Type' => 'application/json'

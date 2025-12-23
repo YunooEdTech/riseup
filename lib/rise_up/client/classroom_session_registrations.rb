@@ -16,6 +16,17 @@ module RiseUp
         end
       end
 
+      def retrieve_classrroom_session_registrations_by_session_id(session_id)
+         request(ApiResource::SessionSubscription) do
+           self.class.get("#{@base_uri}/#{BASE}?idsession=#{session_id}", {
+                                       headers: {
+                                          'Authorization' => "Bearer #{access_token}",
+                                         'Content-Type' => 'application/json'
+                                       }
+                                     })
+         end
+      end
+
       def delete_classroom_session_registrations(classroom_session_registration_id)
         self.class.delete("#{@base_uri}/#{BASE}/#{classroom_session_registration_id}", {
                           headers: {
