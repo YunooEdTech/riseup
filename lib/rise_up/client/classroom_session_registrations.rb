@@ -16,8 +16,8 @@ module RiseUp
         end
       end
 
-      def retrieve_classrroom_session_registrations_by_session_id(session_id)
-         request(ApiResource::SessionSubscription) do
+      def retrieve_classroom_session_registrations_by_session_id(session_id)
+         request(ApiResource::ClassroomSessionRegistration) do
            self.class.get("#{@base_uri}/#{BASE}?idsession=#{session_id}", {
                                        headers: {
                                           'Authorization' => "Bearer #{access_token}",
