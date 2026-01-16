@@ -118,11 +118,15 @@ module RiseUp
     BASE_URIS = {
       production: {
         aws: 'https://api.riseup.ai/v3',
-        azure: 'https://api.riseup.fr/v3'
+        ovh: 'https://api.riseup.fr/v3',
+        ovh_light: 'https://api.riseup.ovh/v3',
+        scw: 'https://fr-par-api.riseup.fr/v3'
       },
       preprod: {
         aws: 'https://preprod-customer-api.riseup.ai/v3',
-        azure: 'https://preprod-customer-api.riseup.fr/v3'
+        ovh: 'https://preprod-customer-api.riseup.fr/v3',
+        ovh_light: 'https://preprod-customer-api.riseup.ovh/v3',
+        scw: 'https://preprod-customer-api.riseup.scw/v3' # doesnt exist for now - to update when available
       }
     }.freeze
 
