@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "uri"
+
 module RiseUp
   class Client
     module Authentication
@@ -7,7 +9,7 @@ module RiseUp
 
       def authenticate
         response = self.class.post("#{@base_uri}/#{BASE}", {
-                                    body: { grant_type: "client_credentials" }.to_query,
+                                    body: URI.encode_www_form(grant_type: "client_credentials"),
                                     headers: {
                                       'Authorization' => "Basic #{authorization_base_64}",
                                       'Content-Type' => 'application/x-www-form-urlencoded'
