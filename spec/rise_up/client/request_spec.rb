@@ -83,7 +83,7 @@ RSpec.describe RiseUp::Client do
         allow(client).to receive(:handle_errors) do
           if call_count.zero?
             call_count += 1
-            raise "Token refreshed. Retrying request."
+            raise RiseUp::Errors::RetryableTokenRefresh.new("Token refreshed. Retrying request.")
           end
         end
 
@@ -100,11 +100,100 @@ RSpec.describe RiseUp::Client do
           body: "{}"
         )
 
-        allow(client).to receive(:handle_errors).and_raise("Token refreshed. Retrying request.")
+        allow(client).to receive(:handle_errors).and_raise(
+          RiseUp::Errors::RetryableTokenRefresh.new("Token refreshed. Retrying request.")
+        )
 
         expect do
           client.request { raw_response }
-        end.to raise_error(RuntimeError, "Token refreshed. Retrying request.")
+        end.to raise_error(RiseUp::Errors::TransportError, /Token refresh retries exceeded/)
+      end
+    end
+
+    context "when a reporting service is provided" do
+      let(:reporter) { instance_double("Reporter") }
+
+      subject(:client) { described_class.new(options.merge(reporting_service: reporter)) }
+
+      before do
+        allow(reporter).to receive(:report)
+      end
+
+      it "reports API errors on final failure" do
+        response = instance_double(
+          "Response",
+          code: 400,
+          headers: { "X-Req" => "1" },
+          body: '{"error":"invalid_scope","error_description":"bad"}'
+        )
+
+        expect do
+          client.request { response }
+        end.to raise_error(RiseUp::ApiResponseError)
+
+        expect(reporter).to have_received(:report).once do |exception, context:|
+          expect(exception).to be_a(RiseUp::ApiResponseError)
+          expect(context).to be_a(Hash)
+          expect(context[:status]).to eq(400)
+        end
+      end
+
+      it "does not report 404 API errors" do
+        response = instance_double(
+          "Response",
+          code: 404,
+          headers: {},
+          body: '{"error":"not_found","error_description":"missing"}'
+        )
+
+        expect do
+          client.request { response }
+        end.to raise_error(RiseUp::ApiResponseError)
+
+        expect(reporter).not_to have_received(:report)
+      end
+
+      it "reports JSON parsing errors" do
+        response = instance_double(
+          "Response",
+          code: 200,
+          headers: {},
+          body: "not-json"
+        )
+
+        expect do
+          client.request { response }
+        end.to raise_error(RiseUp::Errors::TransportError, /Failed to parse JSON/)
+
+        expect(reporter).to have_received(:report).once
+      end
+
+      it "does not report internal retries (token refresh / 429 retry)" do
+        # token refresh retry
+        call_count = 0
+        raw_response = instance_double("Response", code: 200, headers: {}, body: "{}")
+        allow(client).to receive(:handle_errors) do
+          if call_count.zero?
+            call_count += 1
+            raise RiseUp::Errors::RetryableTokenRefresh.new("Token refreshed. Retrying request.")
+          end
+        end
+
+        client.request { raw_response }
+
+        # 429 retry path
+        calls = []
+        first_response = instance_double("Response", code: 429, headers: {}, body: "{}")
+        second_response = instance_double("Response", code: 200, headers: {}, body: "{}")
+        allow(client).to receive(:sleep)
+
+        client.request do
+          resp = calls.empty? ? first_response : second_response
+          calls << resp.code
+          resp
+        end
+
+        expect(reporter).not_to have_received(:report)
       end
     end
 

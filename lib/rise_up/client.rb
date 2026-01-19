@@ -1,5 +1,6 @@
 require 'httparty'
 require 'ostruct'
+require 'rise_up/errors'
 require 'rise_up/api_resource/resource'
 require 'rise_up/api_resource/certification'
 require 'rise_up/api_resource/training_session'
@@ -64,7 +65,9 @@ require 'rise_up/client/classroom_session_registrations'
 
 module RiseUp
   class ExpiredTokenError < StandardError; end
-  class ApiResponseError < StandardError; end
+  # Backwards-compatible error type for API error payloads.
+  # Prefer rescuing RiseUp::Errors::ApiError or RiseUp::Errors::Error.
+  class ApiResponseError < Errors::ApiError; end
   class RateLimitRetryError < StandardError; end
 
   class Client
@@ -99,7 +102,14 @@ module RiseUp
     include RiseUp::Client::SessionSubscriptions
     include RiseUp::Client::ClassroomSessionRegistrations
 
-    attr_accessor :public_key, :private_key, :authorization_base_64, :access_token_details, :access_token, :token_storage, :mode
+    attr_accessor :public_key,
+                  :private_key,
+                  :authorization_base_64,
+                  :access_token_details,
+                  :access_token,
+                  :token_storage,
+                  :mode,
+                  :reporting_service
 
     RATE_LIMIT_CAPACITY = 400
     RATE_LIMIT_REFILL_PER_SECOND = RATE_LIMIT_CAPACITY.to_f / 60.0
@@ -192,8 +202,8 @@ module RiseUp
           raise RateLimitRetryError, 'Rate limit encountered. Retrying request.'
         end
 
-        parsed_body = JSON.parse(raw_response.body)
-        handle_errors(parsed_body)
+        parsed_body = parse_json_body(raw_response)
+        handle_errors(parsed_body, raw_response)
 
         if wrap_response
           OpenStruct.new(body: handle_response(parsed_body, resource), headers: raw_response.headers)
@@ -202,13 +212,28 @@ module RiseUp
         end
       rescue RateLimitRetryError
         retry
-      rescue RuntimeError => e
-        if should_retry?(e, token_retries, max_token_retries)
+      rescue Errors::RetryableTokenRefresh => e
+        if token_retries < max_token_retries
           token_retries += 1
           retry
-        else
-          raise e
         end
+
+        final_exc = Errors::TransportError.new(
+          "Token refresh retries exceeded",
+          context: (e.context || {}).merge(max_token_retries: max_token_retries)
+        )
+        report_exception(final_exc)
+        raise final_exc
+      rescue Errors::Error => e
+        report_exception(e)
+        raise e
+      rescue StandardError => e
+        wrapped = Errors::TransportError.new(
+          "HTTP request failed: #{e.class}: #{e.message}",
+          context: { base_uri: @base_uri }
+        )
+        report_exception(wrapped)
+        raise wrapped
       end
     end
 
@@ -225,6 +250,39 @@ module RiseUp
       end
     end
 
+    def parse_json_body(raw_response)
+      body = raw_response&.body
+      return {} if body.nil? || body.to_s.strip.empty?
+
+      JSON.parse(body)
+    rescue JSON::ParserError, TypeError => e
+      raise Errors::TransportError.new(
+        "Failed to parse JSON response",
+        context: {
+          status: raw_response&.code,
+          response_headers: raw_response&.headers,
+          response_body: body
+        }
+      )
+    end
+
+    def report_exception(exception)
+      return unless reporting_service
+      return unless reporting_service.respond_to?(:report)
+
+      context = {}
+      context = exception.context if exception.respond_to?(:context) && exception.context.is_a?(Hash)
+
+      # Don't report 404 errors
+      status = exception.respond_to?(:status) ? exception.status : context[:status]
+      return if status.to_i == 404
+
+      reporting_service.report(exception, context: context)
+    rescue StandardError
+      # Never let reporting failures break the client.
+      nil
+    end
+
     def extract_next_link(link_header)
       return nil unless link_header
 
@@ -234,7 +292,7 @@ module RiseUp
       next_link&.match(/<(.+?)>/)&.captures&.first
     end
 
-    def handle_errors(response)
+    def handle_errors(response, raw_response = nil)
       return unless response.is_a?(Hash)
 
       return unless response['error']
@@ -242,9 +300,24 @@ module RiseUp
       if response['error']
         if retryable_error?(response['error'])
           refresh_access_token
-          raise 'Token refreshed. Retrying request.'
+          raise Errors::RetryableTokenRefresh.new(
+            "Token refreshed. Retrying request.",
+            context: {
+              status: raw_response&.code,
+              error: response['error'],
+              error_description: response['error_description'],
+              response_headers: raw_response&.headers,
+              response_body: raw_response&.body
+            }
+          )
         else
-          raise(ApiResponseError, "#{response['error']} - #{response['error_description']}")
+          raise ApiResponseError.new(
+            status: raw_response&.code,
+            error: response['error'],
+            error_description: response['error_description'],
+            response_headers: raw_response&.headers,
+            response_body: raw_response&.body
+          )
         end
       end
     end
@@ -292,7 +365,13 @@ module RiseUp
         sleep(rate_limit_sleep_seconds(rate_limit_retries))
         true
       else
-        raise(ApiResponseError, 'Rate limit exceeded and max retries reached')
+        raise ApiResponseError.new(
+          status: raw_response&.code,
+          error: 'rate_limit_exceeded',
+          error_description: 'Rate limit exceeded and max retries reached',
+          response_headers: raw_response&.headers,
+          response_body: raw_response&.body
+        )
       end
     end
 
@@ -303,8 +382,5 @@ module RiseUp
       (base_delay_seconds * jitter_factor).round(1)
     end
 
-    def should_retry?(exception, retries, max_retries)
-      exception.message == 'Token refreshed. Retrying request.' && retries < max_retries
-    end
   end
 end
