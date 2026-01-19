@@ -273,6 +273,12 @@ module RiseUp
       context = {}
       context = exception.context if exception.respond_to?(:context) && exception.context.is_a?(Hash)
 
+      # Don't report 404 errors
+      status = nil
+      status = exception.status if exception.respond_to?(:status)
+      status ||= context[:status]
+      return if status.to_i == 404
+
       reporting_service.report(exception, context: context)
     rescue StandardError
       # Never let reporting failures break the client.

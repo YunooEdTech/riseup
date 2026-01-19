@@ -138,6 +138,21 @@ RSpec.describe RiseUp::Client do
         end
       end
 
+      it "does not report 404 API errors" do
+        response = instance_double(
+          "Response",
+          code: 404,
+          headers: {},
+          body: '{"error":"not_found","error_description":"missing"}'
+        )
+
+        expect do
+          client.request { response }
+        end.to raise_error(RiseUp::ApiResponseError)
+
+        expect(reporter).not_to have_received(:report)
+      end
+
       it "reports JSON parsing errors" do
         response = instance_double(
           "Response",
