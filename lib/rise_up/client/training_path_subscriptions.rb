@@ -19,12 +19,14 @@ module RiseUp
 
 
       def delete_training_path_subscription(training_path_subscription_id)
-        self.class.delete("#{@base_uri}/#{BASE}/#{training_path_subscription_id}", {
-                          headers: {
-                            'Authorization' => "Bearer #{access_token}",
-                            'Content-Type' => 'application/json'
-                          }
-                        })
+        request(nil) do
+          self.class.delete("#{@base_uri}/#{BASE}/#{training_path_subscription_id}", {
+                            headers: {
+                              'Authorization' => "Bearer #{access_token}",
+                              'Content-Type' => 'application/json'
+                            }
+                          })
+        end
       end
 
       def retrieve_training_path_subscription(training_path_subscription_id, options={})

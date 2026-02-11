@@ -188,25 +188,33 @@ module RiseUp
     def request(resource = nil, wrap_response: false)
       max_token_retries = 2
       max_rate_limit_retries = 3
-
       token_retries = 0
       rate_limit_retries = 0
 
       begin
         self.class.rate_limiter.consume
-
         raw_response = yield
 
         if handle_rate_limit(raw_response, rate_limit_retries, max_rate_limit_retries)
           rate_limit_retries += 1
-          raise RateLimitRetryError, 'Rate limit encountered. Retrying request.'
+          raise RateLimitRetryError
         end
 
+        if unauthorized?(raw_response)
+          raise Errors::RetryableTokenRefresh.new(
+            "Token refreshed. Retrying request.",
+            context: {
+              status: raw_response&.code,
+              response_headers: raw_response&.headers,
+              response_body: raw_response&.body
+            }
+          )
+        end
         parsed_body = parse_json_body(raw_response)
         handle_errors(parsed_body, raw_response)
 
         if wrap_response
-          OpenStruct.new(body: handle_response(parsed_body, resource), headers: raw_response.headers)
+          OpenStruct.new(code: raw_response.code, body: handle_response(parsed_body, resource), headers: raw_response.headers)
         else
           handle_response(parsed_body, resource)
         end
@@ -215,6 +223,7 @@ module RiseUp
       rescue Errors::RetryableTokenRefresh => e
         if token_retries < max_token_retries
           token_retries += 1
+          refresh_access_token
           retry
         end
 
@@ -255,7 +264,7 @@ module RiseUp
       return {} if body.nil? || body.to_s.strip.empty?
 
       JSON.parse(body)
-    rescue JSON::ParserError, TypeError => e
+    rescue JSON::ParserError, TypeError
       raise Errors::TransportError.new(
         "Failed to parse JSON response",
         context: {
@@ -292,62 +301,40 @@ module RiseUp
       next_link&.match(/<(.+?)>/)&.captures&.first
     end
 
-    def handle_errors(response, raw_response = nil)
-      return unless response.is_a?(Hash)
+    def unauthorized?(response)
+      response.code.to_i == 401
+    end
 
-      return unless response['error']
+    def handle_errors(parsed_body, raw_response = nil)
+      return unless parsed_body.is_a?(Hash) && parsed_body['error']
 
-      if response['error']
-        if retryable_error?(response['error'])
-          refresh_access_token
-          raise Errors::RetryableTokenRefresh.new(
-            "Token refreshed. Retrying request.",
-            context: {
-              status: raw_response&.code,
-              error: response['error'],
-              error_description: response['error_description'],
-              response_headers: raw_response&.headers,
-              response_body: raw_response&.body
-            }
-          )
-        else
-          raise ApiResponseError.new(
+      if retryable_token_error?(parsed_body['error'])
+        raise Errors::RetryableTokenRefresh.new(
+          "Token refreshed. Retrying request.",
+          context: {
             status: raw_response&.code,
-            error: response['error'],
-            error_description: response['error_description'],
+            error: parsed_body['error'],
+            error_description: parsed_body['error_description'],
             response_headers: raw_response&.headers,
             response_body: raw_response&.body
-          )
-        end
+          }
+        )
+      else
+        raise ApiResponseError.new(
+          status: raw_response&.code,
+          error: parsed_body['error'],
+          error_description: parsed_body['error_description'],
+          response_headers: raw_response&.headers,
+          response_body: raw_response&.body
+        )
       end
     end
 
-    def retryable_error?(error)
-      expired_token?(error) || absent_token?(error) || invalid_token?(error)
-    end
-
-    def expired_token?(error)
-      error.include?("expired_token")
-    end
-
-    def invalid_token?(error)
-      error.include?("invalid_token")
-    end
-
-    def error_requiring_refresh_token?(response)
-      expired_token_error?(response['error']) || absent_token?(response['error']) || missing_expired_error?(response['error_description'])
-    end
-
-    def expired_token_error?(error)
-      error == "expired_token"
-    end
-
-    def absent_token?(error)
-      error == 'invalid_request' && self.access_token.nil?
-    end
-
-    def missing_expired_error?(error_description)
-      error_description == 'Malformed token (missing "expires")'
+    def retryable_token_error?(error)
+      error = error.to_s
+      return true if error.include?('expired_token')
+      return true if error.include?('invalid_token')
+      error == 'invalid_request' && access_token.nil?
     end
 
     def handle_array_response(response, resource)
@@ -381,6 +368,5 @@ module RiseUp
 
       (base_delay_seconds * jitter_factor).round(1)
     end
-
   end
 end

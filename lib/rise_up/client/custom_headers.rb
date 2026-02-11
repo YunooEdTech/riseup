@@ -58,17 +58,19 @@ module RiseUp
           })
         end
       end
-      
-      # DELETE: Delete a custom header
+
+      # DELETE: Delete a custom header (wrap_response so caller gets .code; body is nil for 204)
       def delete_custom_header(id)
         url = "#{@base_uri}/#{BASE}/#{id}"
-        self.class.delete(
-          url, 
-          headers: {
-            'Authorization' => "Bearer #{access_token}",
-            'Content-Type' => 'application/json'
-          }
-        )
+        request(nil, wrap_response: true) do
+          self.class.delete(
+            url,
+            headers: {
+              'Authorization' => "Bearer #{access_token}",
+              'Content-Type' => 'application/json'
+            }
+          )
+        end
       end
     end
   end

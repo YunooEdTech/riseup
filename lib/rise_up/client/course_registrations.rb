@@ -19,12 +19,14 @@ module RiseUp
       end
 
       def delete_course_registration(course_registration_id)
+        request(nil) do
           self.class.delete("#{@base_uri}/#{BASE}/#{course_registration_id}", {
                             headers: {
                               'Authorization' => "Bearer #{access_token}",
                               'Content-Type' => 'application/json'
                             }
                           })
+        end
       end
 
       def retrieve_course_registration(course_registration_id, options={})

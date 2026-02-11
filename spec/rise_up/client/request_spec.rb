@@ -70,6 +70,22 @@ RSpec.describe RiseUp::Client do
     end
 
     context "when token is refreshed and retried" do
+      before { allow(client).to receive(:refresh_access_token) }
+
+      it "retries on 401 and succeeds on second attempt" do
+        unauthorized_response = instance_double("Response", code: 401, headers: {}, body: "")
+        success_response = instance_double("Response", code: 200, headers: {}, body: "{}")
+        call_count = 0
+
+        result = client.request do
+          call_count += 1
+          call_count == 1 ? unauthorized_response : success_response
+        end
+
+        expect(call_count).to eq(2)
+        expect(result).to be_nil
+      end
+
       it "retries the request on token refresh sentinel error" do
         raw_response = instance_double(
           "Response",
@@ -170,6 +186,7 @@ RSpec.describe RiseUp::Client do
 
       it "does not report internal retries (token refresh / 429 retry)" do
         # token refresh retry
+        allow(client).to receive(:refresh_access_token)
         call_count = 0
         raw_response = instance_double("Response", code: 200, headers: {}, body: "{}")
         allow(client).to receive(:handle_errors) do
@@ -226,4 +243,3 @@ RSpec.describe RiseUp::Client do
     end
   end
 end
-
