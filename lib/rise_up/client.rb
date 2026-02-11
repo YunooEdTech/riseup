@@ -66,6 +66,7 @@ module RiseUp
   class ExpiredTokenError < StandardError; end
   class ApiResponseError < StandardError; end
   class RateLimitRetryError < StandardError; end
+  class TokenRetryError < StandardError; end
 
   class Client
     include HTTParty
@@ -178,36 +179,37 @@ module RiseUp
     def request(resource = nil, wrap_response: false)
       max_token_retries = 2
       max_rate_limit_retries = 3
-
       token_retries = 0
       rate_limit_retries = 0
 
       begin
         self.class.rate_limiter.consume
-
         raw_response = yield
 
         if handle_rate_limit(raw_response, rate_limit_retries, max_rate_limit_retries)
           rate_limit_retries += 1
-          raise RateLimitRetryError, 'Rate limit encountered. Retrying request.'
+          raise RateLimitRetryError
         end
 
-        parsed_body = JSON.parse(raw_response.body)
+        raise TokenRetryError if unauthorized?(raw_response)
+
+        parsed_body = parse_response_body(raw_response.body)
         handle_errors(parsed_body)
 
         if wrap_response
-          OpenStruct.new(body: handle_response(parsed_body, resource), headers: raw_response.headers)
+          OpenStruct.new(code: raw_response.code, body: handle_response(parsed_body, resource), headers: raw_response.headers)
         else
           handle_response(parsed_body, resource)
         end
       rescue RateLimitRetryError
         retry
-      rescue RuntimeError => e
-        if should_retry?(e, token_retries, max_token_retries)
-          token_retries += 1
+      rescue TokenRetryError
+        token_retries += 1
+        if token_retries <= max_token_retries
+          refresh_access_token
           retry
         else
-          raise e
+          raise ApiResponseError, 'Unauthorized after token refresh'
         end
       end
     end
@@ -234,47 +236,31 @@ module RiseUp
       next_link&.match(/<(.+?)>/)&.captures&.first
     end
 
-    def handle_errors(response)
-      return unless response.is_a?(Hash)
+    def parse_response_body(body)
+      return {} if body.nil? || body.to_s.strip.empty?
 
-      return unless response['error']
+      JSON.parse(body)
+    end
 
-      if response['error']
-        if retryable_error?(response['error'])
-          refresh_access_token
-          raise 'Token refreshed. Retrying request.'
-        else
-          raise(ApiResponseError, "#{response['error']} - #{response['error_description']}")
-        end
+    def unauthorized?(response)
+      response.code.to_i == 401
+    end
+
+    def handle_errors(parsed_body)
+      return unless parsed_body.is_a?(Hash) && parsed_body['error']
+
+      if retryable_token_error?(parsed_body['error'])
+        raise TokenRetryError
+      else
+        raise ApiResponseError, "#{parsed_body['error']} - #{parsed_body['error_description']}"
       end
     end
 
-    def retryable_error?(error)
-      expired_token?(error) || absent_token?(error) || invalid_token?(error)
-    end
-
-    def expired_token?(error)
-      error.include?("expired_token")
-    end
-
-    def invalid_token?(error)
-      error.include?("invalid_token")
-    end
-
-    def error_requiring_refresh_token?(response)
-      expired_token_error?(response['error']) || absent_token?(response['error']) || missing_expired_error?(response['error_description'])
-    end
-
-    def expired_token_error?(error)
-      error == "expired_token"
-    end
-
-    def absent_token?(error)
-      error == 'invalid_request' && self.access_token.nil?
-    end
-
-    def missing_expired_error?(error_description)
-      error_description == 'Malformed token (missing "expires")'
+    def retryable_token_error?(error)
+      error = error.to_s
+      return true if error.include?('expired_token')
+      return true if error.include?('invalid_token')
+      error == 'invalid_request' && access_token.nil?
     end
 
     def handle_array_response(response, resource)
@@ -301,10 +287,6 @@ module RiseUp
       jitter_factor = 1.0 + (rand * 0.2) # 1.0x–1.2x
 
       (base_delay_seconds * jitter_factor).round(1)
-    end
-
-    def should_retry?(exception, retries, max_retries)
-      exception.message == 'Token refreshed. Retrying request.' && retries < max_retries
     end
   end
 end
