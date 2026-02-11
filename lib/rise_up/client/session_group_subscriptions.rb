@@ -16,12 +16,14 @@ module RiseUp
       end
 
       def delete_session_group_subscription(session_group_subscription_id)
-        self.class.delete("#{@base_uri}/#{BASE}/#{session_group_subscription_id}", {
-                          headers: {
-                            'Authorization' => "Bearer #{access_token}",
-                            'Content-Type' => 'application/json'
-                          }
-                        })
+        request(nil) do
+          self.class.delete("#{@base_uri}/#{BASE}/#{session_group_subscription_id}", {
+                            headers: {
+                              'Authorization' => "Bearer #{access_token}",
+                              'Content-Type' => 'application/json'
+                            }
+                          })
+        end
       end
 
       def get_module(session_group_subscription_id)
