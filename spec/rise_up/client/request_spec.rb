@@ -186,6 +186,7 @@ RSpec.describe RiseUp::Client do
 
       it "does not report internal retries (token refresh / 429 retry)" do
         # token refresh retry
+        allow(client).to receive(:refresh_access_token)
         call_count = 0
         raw_response = instance_double("Response", code: 200, headers: {}, body: "{}")
         allow(client).to receive(:handle_errors) do

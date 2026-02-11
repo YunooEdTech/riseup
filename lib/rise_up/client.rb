@@ -301,40 +301,32 @@ module RiseUp
       next_link&.match(/<(.+?)>/)&.captures&.first
     end
 
-    def handle_errors(response, raw_response = nil)
-      return unless response.is_a?(Hash)
-
-      JSON.parse(body)
-    end
-
     def unauthorized?(response)
       response.code.to_i == 401
     end
 
-    def handle_errors(parsed_body)
+    def handle_errors(parsed_body, raw_response = nil)
       return unless parsed_body.is_a?(Hash) && parsed_body['error']
 
-      if response['error']
-        if retryable_token_error?(response['error'])
-          raise Errors::RetryableTokenRefresh.new(
-            "Token refreshed. Retrying request.",
-            context: {
-              status: raw_response&.code,
-              error: response['error'],
-              error_description: response['error_description'],
-              response_headers: raw_response&.headers,
-              response_body: raw_response&.body
-            }
-          )
-        else
-          raise ApiResponseError.new(
+      if retryable_token_error?(parsed_body['error'])
+        raise Errors::RetryableTokenRefresh.new(
+          "Token refreshed. Retrying request.",
+          context: {
             status: raw_response&.code,
-            error: response['error'],
-            error_description: response['error_description'],
+            error: parsed_body['error'],
+            error_description: parsed_body['error_description'],
             response_headers: raw_response&.headers,
             response_body: raw_response&.body
-          )
-        end
+          }
+        )
+      else
+        raise ApiResponseError.new(
+          status: raw_response&.code,
+          error: parsed_body['error'],
+          error_description: parsed_body['error_description'],
+          response_headers: raw_response&.headers,
+          response_body: raw_response&.body
+        )
       end
     end
 
