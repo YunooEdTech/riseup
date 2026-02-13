@@ -109,8 +109,10 @@ module RiseUp
                   :access_token,
                   :token_storage,
                   :mode,
-                  :reporting_service
+                  :reporting_service,
+                  :timeout
 
+    DEFAULT_TIMEOUT = 30 # seconds
     RATE_LIMIT_CAPACITY = 400
     RATE_LIMIT_REFILL_PER_SECOND = RATE_LIMIT_CAPACITY.to_f / 60.0
     BASE_RATE_LIMIT_DELAYS = [10, 20, 30].freeze
@@ -138,6 +140,9 @@ module RiseUp
       mode = options.fetch(:mode, 'production').to_sym
       cloud = options.fetch(:cloud, 'aws').to_sym
       @base_uri = BASE_URIS.dig(mode, cloud) || BASE_URIS[:production][:aws]
+      @timeout = options.fetch(:timeout, DEFAULT_TIMEOUT)
+
+      self.class.default_timeout @timeout
 
       yield(self) if block_given?
     end
@@ -236,6 +241,13 @@ module RiseUp
       rescue Errors::Error => e
         report_exception(e)
         raise e
+      rescue Net::OpenTimeout, Net::ReadTimeout => e
+        wrapped = Errors::TransportError.new(
+          "HTTP timeout after #{@timeout}s: #{e.class}: #{e.message}",
+          context: { base_uri: @base_uri, timeout: @timeout }
+        )
+        report_exception(wrapped)
+        raise wrapped
       rescue StandardError => e
         wrapped = Errors::TransportError.new(
           "HTTP request failed: #{e.class}: #{e.message}",
