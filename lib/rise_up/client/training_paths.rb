@@ -7,7 +7,7 @@ module RiseUp
 
 
       def get_training_path(training_path_id)
-        request(ApiResource::training_path) do
+        request(ApiResource::TrainingPath) do
           self.class.get("#{@base_uri}/#{BASE}/#{training_path_id}", {
                                       headers: {
                                         'Authorization' => "Bearer #{access_token}",
