@@ -18,10 +18,10 @@ module RiseUp
         end
       end
 
-      def archive_course_registration(course_registration_id)
+      def update_course_registration(course_registration_id, options = {})
         request(ApiResource::CourseRegistration) do
           self.class.put("#{@base_uri}/#{BASE}/#{course_registration_id}", {
-                           body: { state: 'archived' }.to_json,
+                           body: options.to_json,
                            headers: {
                              'Authorization' => "Bearer #{access_token}",
                              'Content-Type' => 'application/json'
