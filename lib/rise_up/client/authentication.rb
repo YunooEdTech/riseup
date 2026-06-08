@@ -8,14 +8,14 @@ module RiseUp
       BASE = '/oauth/token'
 
       def authenticate
-        response = self.class.post("#{@base_uri}/#{BASE}", {
-                                    body: URI.encode_www_form(grant_type: "client_credentials"),
-                                    headers: {
-                                      'Authorization' => "Basic #{authorization_base_64}",
-                                      'Content-Type' => 'application/x-www-form-urlencoded'
-                                    }
-                                  })
-        response = JSON.parse(response.body)
+        raw_response = self.class.post("#{@base_uri}/#{BASE}", {
+                                         body: URI.encode_www_form(grant_type: "client_credentials"),
+                                         headers: {
+                                           'Authorization' => "Basic #{authorization_base_64}",
+                                           'Content-Type' => 'application/x-www-form-urlencoded'
+                                         }
+                                       })
+        response = parse_json_body(raw_response)
         self.access_token_details = response
         self.access_token = response["access_token"]
         response

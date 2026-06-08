@@ -1,5 +1,7 @@
 require 'httparty'
 require 'ostruct'
+require 'stringio'
+require 'zlib'
 require 'rise_up/errors'
 require 'rise_up/api_resource/resource'
 require 'rise_up/api_resource/certification'
@@ -272,7 +274,7 @@ module RiseUp
     end
 
     def parse_json_body(raw_response)
-      body = raw_response&.body
+      body = decoded_body(raw_response)
       return {} if body.nil? || body.to_s.strip.empty?
 
       JSON.parse(body)
@@ -285,6 +287,36 @@ module RiseUp
           response_body: body
         }
       )
+    end
+
+    def decoded_body(raw_response)
+      body = raw_response&.body
+      return body if body.nil?
+
+      body = body.to_s
+      return body unless gzip_encoded?(raw_response&.headers)
+
+      Zlib::GzipReader.new(StringIO.new(body)).read
+    rescue Zlib::Error, IOError => e
+      raise Errors::TransportError.new(
+        "Failed to decode gzipped response",
+        context: {
+          status: raw_response&.code,
+          response_headers: raw_response&.headers,
+          response_body: body
+        }
+      )
+    end
+
+    def gzip_encoded?(headers)
+      header_value(headers, 'content-encoding').to_s.include?('gzip')
+    end
+
+    def header_value(headers, key)
+      return if headers.nil?
+
+      value = headers[key] || headers[key.to_sym] || headers[key.downcase] || headers[key.upcase]
+      value.is_a?(Array) ? value.first : value
     end
 
     def report_exception(exception)

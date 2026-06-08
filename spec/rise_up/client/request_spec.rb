@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "stringio"
+require "zlib"
 
 RSpec.describe RiseUp::Client do
   let(:options) { { public_key: "pk", private_key: "sk" } }
@@ -241,5 +243,50 @@ RSpec.describe RiseUp::Client do
         expect(result).to be_a(SingleResource)
       end
     end
+
+    context "when the response body is gzipped" do
+      it "decompresses the body before parsing JSON" do
+        raw_response = instance_double(
+          "Response",
+          code: 200,
+          headers: { "content-encoding" => ["gzip"] },
+          body: gzip('{"name":"Alice"}')
+        )
+
+        stub_const("SingleResource", Class.new(RiseUp::ApiResource::Resource))
+
+        result = client.request(SingleResource) { raw_response }
+
+        expect(result).to be_a(SingleResource)
+        expect(result.name).to eq("Alice")
+      end
+    end
+  end
+
+  describe "#authenticate" do
+    it "decompresses gzipped authentication responses" do
+      client.authorization_base_64 = "encoded-creds"
+      raw_response = instance_double(
+        "Response",
+        body: gzip('{"access_token":"token-123","expires_in":3600}'),
+        headers: { "content-encoding" => ["gzip"] }
+      )
+
+      allow(described_class).to receive(:post).and_return(raw_response)
+
+      result = client.authenticate
+
+      expect(result["access_token"]).to eq("token-123")
+      expect(client.access_token).to eq("token-123")
+      expect(client.access_token_details).to eq(result)
+    end
+  end
+
+  def gzip(payload)
+    io = StringIO.new
+    writer = Zlib::GzipWriter.new(io)
+    writer.write(payload)
+    writer.close
+    io.string
   end
 end
