@@ -8,7 +8,7 @@ module RiseUp
       def create_training_session_registration(user_id, training_session_id, options = {})
         request(ApiResource::TrainingSessionRegistration) do
           self.class.post("#{@base_uri}/#{BASE}", {
-                            body: options.merge(iduser: user_id, idpath: training_session_id).to_json,
+                            body: options.merge(iduser: user_id.to_i, idpath: training_session_id.to_i).to_json,
                             headers: {
                               'Authorization' => "Bearer #{access_token}",
                               'Content-Type' => 'application/json'

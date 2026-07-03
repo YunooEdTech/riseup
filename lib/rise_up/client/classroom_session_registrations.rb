@@ -7,7 +7,7 @@ module RiseUp
         def create_classroom_session_registrations(user_id, classroom_session_id, options = {})
         request(ApiResource::ClassroomSessionRegistration) do
           self.class.post("#{@base_uri}/#{BASE}", {
-                            body: options.merge(iduser: user_id, idsession: classroom_session_id).to_json,
+                            body: options.merge(iduser: user_id.to_i, idsession: classroom_session_id.to_i).to_json,
                             headers: {
                               'Authorization' => "Bearer #{access_token}",
                               'Content-Type' => 'application/json'
