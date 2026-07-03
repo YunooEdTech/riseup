@@ -6,7 +6,7 @@ module RiseUp
       def create_session_group_subscription(user_id, session_group_id, options = {})
         request(ApiResource::SessionGroupSubscription) do
           self.class.post("#{@base_uri}/#{BASE}", {
-                            body: options.merge(iduser: user_id, idsessiongroup: session_group_id).to_json,
+                            body: options.merge(iduser: user_id.to_i, idsessiongroup: session_group_id.to_i).to_json,
                             headers: {
                               'Authorization' => "Bearer #{access_token}",
                               'Content-Type' => 'application/json'

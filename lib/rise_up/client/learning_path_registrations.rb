@@ -8,7 +8,7 @@ module RiseUp
       def create_learning_path_registration(user_id, learning_path_id, options = {})
         request(ApiResource::LearningPathRegistration) do
           self.class.post("#{@base_uri}/#{BASE}", {
-                            body: options.merge(iduser: user_id, idpath: learning_path_id).to_json,
+                            body: options.merge(iduser: user_id.to_i, idpath: learning_path_id.to_i).to_json,
                             headers: {
                               'Authorization' => "Bearer #{access_token}",
                               'Content-Type' => 'application/json'
