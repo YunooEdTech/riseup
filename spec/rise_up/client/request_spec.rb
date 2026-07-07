@@ -8,6 +8,12 @@ RSpec.describe RiseUp::Client do
   let(:options) { { public_key: "pk", private_key: "sk" } }
   subject(:client) { described_class.new(options) }
 
+  describe "User-Agent header" do
+    it "sets the User-Agent header on all requests" do
+      expect(described_class.headers['User-Agent']).to eq('RiseUp-Monetisation/1.0')
+    end
+  end
+
   describe "#request" do
     let(:fake_limiter) { instance_double(RiseUp::TokenBucket, consume: nil) }
 
