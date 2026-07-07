@@ -74,6 +74,8 @@ module RiseUp
 
   class Client
     include HTTParty
+    headers 'User-Agent' => 'RiseUp-Monetisation/1.0'
+
     include RiseUp::Client::Partners
     include RiseUp::Client::Users
     include RiseUp::Client::Authentication
