@@ -8,14 +8,17 @@ module RiseUp
 
       # Company LMS host, not the public API host. Token refresh, rate limits
       # and error payloads are handled by Client#request.
-      def translate(base_url:, language_code:, context:, base_language_code: nil)
+      # texts is a list, or a map keyed by the caller's own ids. The response
+      # translations use those same keys. A text is at most 10_000 characters,
+      # 50 texts and 20_000 characters per call.
+      def translate(base_url:, texts:, target_language_code:, source_language_code: nil)
         response = request(ApiResource::Resource, wrap_response: true) do
           self.class.post(
             "#{base_url.to_s.chomp('/')}#{PATH}",
             body: {
-              languageCode: language_code,
-              baseLanguageCode: base_language_code,
-              context: context
+              texts: texts,
+              targetLanguageCode: target_language_code,
+              sourceLanguageCode: source_language_code
             }.compact.to_json,
             headers: {
               'Authorization' => "Bearer #{access_token}",
@@ -35,7 +38,7 @@ module RiseUp
           )
         end
 
-        response.body['translation'].to_s.strip
+        response.body['translations']
       end
     end
   end

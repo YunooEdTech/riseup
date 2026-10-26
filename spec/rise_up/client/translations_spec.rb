@@ -13,21 +13,30 @@ RSpec.describe RiseUp::Client do
   end
 
   describe "#translate" do
-    it "posts language codes to the company translation route" do
-      raw = instance_double("Response", code: 200, headers: {}, body: '{"translation":" Hallo "}')
+    it "posts a batch of texts and returns the translations under the same keys" do
+      raw = instance_double(
+        "Response",
+        code: 200,
+        headers: {},
+        body: '{"translations":{"title":"Hallo","body":"<p>Siehe</p>"}}'
+      )
       allow(described_class).to receive(:post).and_return(raw)
 
       result = client.translate(
         base_url: "https://client.riseup.ai/",
-        language_code: "de",
-        base_language_code: "fr",
-        context: "Hello"
+        texts: { "title" => "Bonjour", "body" => "<p>Voir</p>" },
+        target_language_code: "de",
+        source_language_code: "fr-FR"
       )
 
-      expect(result).to eq("Hallo")
+      expect(result).to eq("title" => "Hallo", "body" => "<p>Siehe</p>")
       expect(described_class).to have_received(:post).with(
         "https://client.riseup.ai/api-external/translation",
-        body: { languageCode: "de", baseLanguageCode: "fr", context: "Hello" }.to_json,
+        body: {
+          texts: { "title" => "Bonjour", "body" => "<p>Voir</p>" },
+          targetLanguageCode: "de",
+          sourceLanguageCode: "fr-FR"
+        }.to_json,
         headers: {
           "Authorization" => "Bearer tok",
           "Content-Type" => "application/json"
@@ -41,7 +50,7 @@ RSpec.describe RiseUp::Client do
       allow(described_class).to receive(:post).and_return(raw)
 
       expect do
-        client.translate(base_url: "https://client.riseup.ai", language_code: "de", context: "Hello")
+        client.translate(base_url: "https://client.riseup.ai", texts: ["Hello"], target_language_code: "de")
       end.to raise_error(RiseUp::ApiResponseError)
     end
   end
