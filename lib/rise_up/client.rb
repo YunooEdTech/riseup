@@ -64,6 +64,7 @@ require 'rise_up/client/training_session_registrations'
 require 'rise_up/client/training_sessions'
 require 'rise_up/client/session_subscriptions'
 require 'rise_up/client/classroom_session_registrations'
+require 'rise_up/client/translations'
 
 module RiseUp
   class ExpiredTokenError < StandardError; end
@@ -105,6 +106,7 @@ module RiseUp
     include RiseUp::Client::TrainingSessions
     include RiseUp::Client::SessionSubscriptions
     include RiseUp::Client::ClassroomSessionRegistrations
+    include RiseUp::Client::Translations
 
     attr_accessor :public_key,
                   :private_key,
