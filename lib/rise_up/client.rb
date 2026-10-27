@@ -221,6 +221,8 @@ module RiseUp
             }
           )
         end
+        # A 400 or 403 can be an HTML page. Parsing that as JSON hides the status.
+        reject_client_error(raw_response) if [400, 403].include?(raw_response.code.to_i)
         parsed_body = parse_json_body(raw_response)
         handle_errors(parsed_body, raw_response)
 
@@ -275,6 +277,22 @@ module RiseUp
       else
         parsed_body
       end
+    end
+
+    def reject_client_error(raw_response)
+      parsed_body = parse_json_body(raw_response)
+      handle_errors(parsed_body, raw_response)
+      raise ApiResponseError.new(
+        status: raw_response.code.to_i,
+        response_body: raw_response.body,
+        response_headers: raw_response.headers
+      )
+    rescue Errors::TransportError
+      raise ApiResponseError.new(
+        status: raw_response.code.to_i,
+        response_body: raw_response.body,
+        response_headers: raw_response.headers
+      )
     end
 
     def parse_json_body(raw_response)

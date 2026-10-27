@@ -53,5 +53,20 @@ RSpec.describe RiseUp::Client do
         client.translate(base_url: "https://client.riseup.ai", texts: ["Hello"], target_language_code: "de")
       end.to raise_error(RiseUp::ApiResponseError)
     end
+
+    it "raises ApiResponseError when a 403 body is not JSON" do
+      raw = instance_double(
+        "Response",
+        code: 403,
+        headers: {},
+        body: "<!DOCTYPE html><html><body>Forbidden</body></html>"
+      )
+      allow(described_class).to receive(:post).and_return(raw)
+
+      expect do
+        client.translate(base_url: "https://client.riseup.ai", texts: ["Hello"], target_language_code: "de")
+      end.to raise_error(RiseUp::ApiResponseError) { |error| expect(error.status).to eq(403) }
+      expect(described_class).to have_received(:post).once
+    end
   end
 end
