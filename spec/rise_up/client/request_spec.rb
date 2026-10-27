@@ -177,6 +177,19 @@ RSpec.describe RiseUp::Client do
         expect(reporter).not_to have_received(:report)
       end
 
+      it "raises ApiResponseError when a 403 body is not JSON" do
+        response = instance_double(
+          "Response",
+          code: 403,
+          headers: {},
+          body: "<!DOCTYPE html><html><body>Forbidden</body></html>"
+        )
+
+        expect do
+          client.request { response }
+        end.to raise_error(RiseUp::ApiResponseError) { |error| expect(error.status).to eq(403) }
+      end
+
       it "reports JSON parsing errors" do
         response = instance_double(
           "Response",
