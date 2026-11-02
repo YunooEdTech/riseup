@@ -34,6 +34,7 @@ require 'rise_up/api_resource/partner'
 require 'rise_up/api_resource/session_subscription'
 require 'rise_up/api_resource/classroom_session_registration'
 require 'rise_up/utils/token_bucket'
+require 'rise_up/client/company'
 require 'rise_up/client/partners'
 require 'rise_up/client/users'
 require 'rise_up/client/sessions'
@@ -77,6 +78,7 @@ module RiseUp
     include HTTParty
     headers 'User-Agent' => 'RiseUp-Monetisation/1.0'
 
+    include RiseUp::Client::Company
     include RiseUp::Client::Partners
     include RiseUp::Client::Users
     include RiseUp::Client::Authentication
